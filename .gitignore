@@ -1,0 +1,6 @@
+*.log
+*.log.xz
+*.sqlite3
+*.sqlite3.xz
+__pycache__
+error_response.*.txt
