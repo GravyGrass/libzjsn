@@ -1,6 +1,8 @@
-*.log
-*.log.xz
-*.sqlite3
-*.sqlite3.xz
-__pycache__
-error_response.*.txt
+/*.log
+/*.log.xz
+/*.sqlite3
+/*.sqlite3.xz
+/__pycache__
+/debugData
+/error_response.*.txt
+/explore_poll.conf
