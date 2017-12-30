@@ -1,10 +1,14 @@
 import json
+import logging
 import os
 import time
 import traceback
 
 import libzjsn
 
+logging.basicConfig(level = logging.INFO)
+
+libzjsn.loadConfig()
 libzjsn.setSocketTimeout(10)
 
 def writeJSON(path, content):
