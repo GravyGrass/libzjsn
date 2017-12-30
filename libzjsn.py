@@ -9,7 +9,7 @@ import urllib.parse
 import uuid
 import zlib
 
-client_version = '3.4.0'
+client_version = '3.5.0'
 
 class Error(Exception):
   pass

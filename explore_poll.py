@@ -5,6 +5,8 @@ import traceback
 
 import libzjsn
 
+libzjsn.setSocketTimeout(10)
+
 def writeJSON(path, content):
   with open(path, 'w', encoding = 'UTF-8', newline = '\n') as f:
     json.dump(content, f, ensure_ascii = False, indent = 2)
