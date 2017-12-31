@@ -3,6 +3,7 @@
 /*.sqlite3
 /*.sqlite3.xz
 /__pycache__
+/challenge.conf
 /debugData
 /error_response.*.txt
 /explore_poll.conf

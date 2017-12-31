@@ -15,14 +15,22 @@ client_version = '3.5.0'
 logger = logging.getLogger('libzjsn')
 
 initConfig = None
+shipByCid = None
 
 def loadConfig(path = 'init.json'):
   global initConfig
+  global shipByCid
   with open(path, 'r', encoding = 'UTF-8') as configFile:
     initConfig = json.load(configFile, object_pairs_hook=collections.OrderedDict)
+  
+  shipByCid = {}
+  for ship in initConfig['shipCardWu']:
+    cid = int(ship['cid'])
+    shipByCid[cid] = ship
 
 class Error(Exception):
-  pass
+  def __str__(self):
+    return self.message
 
 class ServerError(Error):
   def __init__(self, response):
@@ -40,6 +48,10 @@ class LoginError(Error):
 
 def setSocketTimeout(timeout):
   socket.setdefaulttimeout(timeout)
+
+def writeDebugJSON(path, content):
+  with open(path, 'w', encoding = 'UTF-8', newline = '\n') as f:
+    json.dump(content, f, ensure_ascii = False, indent = 2)
 
 def sendRawHTTPRequest(host, request):
   with socket.create_connection((host, 80)) as s:
@@ -241,3 +253,18 @@ def startExplore(gameServer, fleetId, exploreId, cookie):
     raise ValueError('Returned explore ID {} is not equal to the requested {}.'.format(
         int(data['exploreId']), exploreId))
   return data
+
+def getCanonicalShipName(shipCid):
+  return shipByCid[shipCid]['title']
+
+def isHalfBroken(ship):
+  hp = int(ship['battleProps']['hp'])
+  maxHp = int(ship['battlePropsMax']['hp'])
+  assert(maxHp > 0)
+  return hp * 2 < maxHp
+
+def isBroken(ship):
+  hp = int(ship['battleProps']['hp'])
+  maxHp = int(ship['battlePropsMax']['hp'])
+  assert(maxHp > 0)
+  return hp * 4 < maxHp
