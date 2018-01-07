@@ -12,7 +12,7 @@ from libzjsn import writeDebugJSON as writeJSON
 logging.basicConfig(level = logging.DEBUG)
 
 libzjsn.loadConfig()
-libzjsn.setSocketTimeout(10)
+libzjsn.setSocketTimeout(30)
 
 TARGET_LEVEL = 110
 
@@ -37,6 +37,13 @@ with open('challenge.conf', 'r', encoding = 'UTF-8') as conf:
   FLEET_ID = int(FLEET_ID)
   MAP_ID = int(MAP_ID)
   FORMATION_ID = int(FORMATION_ID)
+
+def getExpProgress(shipResult):
+  exp = 0
+  if 'exp' in shipResult:
+    exp = int(shipResult['exp'])
+  needed = int(shipResult['nextLevelExpNeed'])
+  return (exp, exp + needed)
 
 def execute(client):
   selfShips = client.getFleetDetails(FLEET_ID)
@@ -86,13 +93,16 @@ def execute(client):
   logging.info('Battle result level: %d', int(warResult['warResult']['resultLevel']))
   logging.info('Levels: %s', ', '.join([str(shipResult['level'])
       for shipResult in warResult['warResult']['selfShipResults']]))
-  logging.info('Exp: %s', ', '.join([
-      '{}/{}'.format(shipResult['exp'], shipResult['exp'] + shipResult['nextLevelExpNeed'])
+  logging.info('Exp: %s', ', '.join(['{}/{}'.format(*getExpProgress(shipResult))
       for shipResult in warResult['warResult']['selfShipResults']]))
+  logging.info('%d ships in repository', client.getShipCount())
   
   for shipResult in warResult['warResult']['selfShipResults']:
     if int(shipResult['level']) == TARGET_LEVEL:
       return 'One ship reached level {}'.format(TARGET_LEVEL)
+  
+  if 'drop500' in warResult and int(warResult['drop500']) == 1:
+    return '500 drop reached'
 
 def main():
   client = BasicClient(LOGIN_SERVER, GAME_SERVER, USER_NAME, PASSWORD, debug = True)
@@ -108,6 +118,6 @@ def main():
     except BattleWithBrokenShip as e:
       repairResult = client.issueCommand('/boat/instantRepairShips/[{}]/'.format(e.shipId), True)
       writeJSON('debugData/instantRepairShips.json', repairResult)
-      time.sleep(1)
+      time.sleep(2)
 
 main()

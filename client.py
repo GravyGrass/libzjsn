@@ -68,7 +68,7 @@ class BasicClient:
   
   def _processUpdateTaskVo(self, updateTaskVo):
     def conditionSatisfied(condition):
-      return int(condition['finishedAmount']) >= (condition['totalAmount'])
+      return int(condition['finishedAmount']) >= int(condition['totalAmount'])
     
     for task in updateTaskVo:
       if all((conditionSatisfied(cond) for cond in task['condition'])):
@@ -93,6 +93,9 @@ class BasicClient:
   
   def getTaskAward(self, taskCid):
     return self.issueCommand('/task/getAward/{}/'.format(taskCid), True)
+  
+  def getShipCount(self):
+    return len(self.ships)
   
   def getFleetDetails(self, fleetId):
     fleet = self.fleets[fleetId]
