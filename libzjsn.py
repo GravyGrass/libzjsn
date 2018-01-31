@@ -32,9 +32,17 @@ class Error(Exception):
   def __str__(self):
     return self.message
 
+class HTTPError(Error):
+  def __init__(self, code, message):
+    self.code = code
+    self.message = message
+  
+  def __str__(self):
+    return '{} {}'.format(self.code, self.message)
+
 class ServerError(Error):
-  def __init__(self, response):
-    self.errorCode = int(response['eid'])
+  def __init__(self, errorCode):
+    self.errorCode = int(errorCode)
     eid = str(self.errorCode)
     messageDict = initConfig['errorCode']
     if eid in messageDict:
@@ -105,7 +113,12 @@ assert(makeHTTPRequest('s5.jr.moefantasy.com',
 def dechunkHTTPResponse(response):
   originalResponse = response
   try:
-    response = response.split(b'\r\n\r\n', 1)[1]
+    header, response = response.split(b'\r\n\r\n', 1)
+    headerLines = header.split(b'\r\n')
+    responseCode, codeMessage = re.fullmatch(br'^HTTP/1\.1 ([0-9]+) (.*)$', headerLines[0]).group(1, 2)
+    responseCode = int(responseCode)
+    if responseCode != 200:
+      raise HTTPError(responseCode, codeMessage.decode('UTF-8'))
     data = bytes()
     while True:
       [size, tail] = response.split(b'\r\n', 1)
@@ -121,7 +134,7 @@ def dechunkHTTPResponse(response):
     logFile = open(logPath, 'wb')
     logFile.write(originalResponse)
     logFile.close()
-    raise ValueError('Error response logged to {}'.format(logPath)) from e
+    raise
 
 def decompressHTTPResponse(response):
   return zlib.decompress(dechunkHTTPResponse(response))
@@ -129,7 +142,9 @@ def decompressHTTPResponse(response):
 def decodeHTTPResponse(response):
   parsedResponse = json.loads(decompressHTTPResponse(response).decode('ASCII'), object_pairs_hook=collections.OrderedDict)
   if 'eid' in parsedResponse:
-    raise ServerError(parsedResponse)
+    raise ServerError(parsedResponse['eid'])
+  if 'code' in parsedResponse and int(parsedResponse['code'] < 0):
+    raise ServerError(parsedResponse['code'])
   return parsedResponse
 
 def generateLoginRequestPass1(host, username, password):
@@ -153,12 +168,22 @@ def pickCookieFromResponse(response):
   uid = int(uid)
   return (uid, b'; '.join(cookies).decode('ASCII'))
 
-def issueCommand(gameServer, command, cookie):
+def issueCommand(gameServer, command, cookie, retryCount = 2):
   logger.info('Issuing command %s', command)
   request = makeHTTPRequestEx('GET', gameServer, command, cookie)
-  response = sendRawHTTPRequest(gameServer, request)
-  logger.info('Command finish')
-  return decodeHTTPResponse(response)
+  for i in range(0, retryCount + 1):
+    try:
+      if i > 0:
+        logger.warning('Retry %d/%d...', i, retryCount)
+      response = sendRawHTTPRequest(gameServer, request)
+      logger.info('Command finish')
+      return decodeHTTPResponse(response)
+    except HTTPError as e:
+      logger.info('', exc_info = e)
+      if e.code != 400:
+        raise
+    except socket.timeout:
+      logger.info('', exc_info = True)
 
 def commandSeries(gameServer, commands, cookie, interval):
   '''Returns: list<map>, a list of response data.'''

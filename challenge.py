@@ -12,7 +12,7 @@ from libzjsn import writeDebugJSON as writeJSON
 logging.basicConfig(level = logging.DEBUG)
 
 libzjsn.loadConfig()
-libzjsn.setSocketTimeout(30)
+libzjsn.setSocketTimeout(60)
 
 TARGET_LEVEL = 110
 
@@ -85,7 +85,7 @@ def execute(client):
   hpBeforeNight = dayWarReport['hpBeforeNightWarSelf']
   logging.info('Self HP: ' + ', '.join([str(hp) for hp in hpBeforeNight]))
   
-  time.sleep(20)
+  time.sleep(15)
   
   warResult = client.issueCommand('/pve/getWarResult/0/', True)
   writeJSON('debugData/warResult.json', warResult)
@@ -119,5 +119,10 @@ def main():
       repairResult = client.issueCommand('/boat/instantRepairShips/[{}]/'.format(e.shipId), True)
       writeJSON('debugData/instantRepairShips.json', repairResult)
       time.sleep(2)
+    except libzjsn.ServerError as e:
+      if e.message == '参数错误':
+        logging.info('Ignorable ServerError', exc_info = e)
+      else:
+        raise
 
 main()
