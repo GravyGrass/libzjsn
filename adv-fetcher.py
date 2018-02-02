@@ -31,6 +31,7 @@ def insert(conn, entries):
 def writeDbJob(dbName):
   conn = sqlite3.connect(dbName)
   with closing(conn):
+    conn.execute('PRAGMA busy_timeout = 1200000;')
     while True:
       serverId, category, timestamp, entries = fetchedLogs.get()
       fetchedLogs.task_done()
@@ -85,27 +86,24 @@ def oneServerJob(serverId, category):
   def updateCookie():
     nonlocal cookie, user1, user2, password1, password2
     scheduler.enter(refreshPeriod, 0, updateCookie)
-    try:
-      sys.stderr.write('Login as {}:{}\n'.format(user1, password1))
-      cookie = libzjsn.login(loginServer, gameServer, user1, password1)
-      sys.stderr.write('Login success\n')
-      user1, user2 = user2, user1
-      password1, password2 = password2, password1
-    except:
-      traceback.print_exc()
+    while True:
+      try:
+        sys.stderr.write('Login as {}:{}\n'.format(user1, password1))
+        cookie = libzjsn.login(loginServer, gameServer, user1, password1)
+        break
+      except:
+        traceback.print_exc()
+        time.sleep(5)
+    sys.stderr.write('Login success\n')
+    user1, user2 = user2, user1
+    password1, password2 = password2, password1
 
   def launchFetcher():
     scheduler.enter(fetchPeriod, 0, launchFetcher)
     if cookie:
       fetcherPool.submit(fetchLog, serverId, gameServer, cookie, category)
 
-  while True:
-    try:
-      updateCookie()
-      break
-    except:
-      traceback.print_exc()
-      time.sleep(5)
+  updateCookie()
   launchFetcher()
   scheduler.run()
 

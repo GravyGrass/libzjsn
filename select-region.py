@@ -51,17 +51,19 @@ timePoints = sys.argv[4]
 
 conn = sqlite3.connect(':memory:')
 conn.execute('ATTACH DATABASE ? AS src;', (baseDb,))
+conn.execute('PRAGMA busy_timeout = 1200000;')
 schema = conn.execute('SELECT sql FROM src.SQLITE_MASTER WHERE type = "table" AND tbl_name = ?', (tableName,)).fetchone()[0]
 print(schema)
 start = None
 end = None
 for line in open(timePoints, 'r', encoding = 'UTF-8'):
   line = line.strip()
-  if line.startswith('#'):
+  if len(line) == 0 or line.startswith('#'):
     continue
   start = end
   end = line
-  selectRange(conn, baseName, tableName, schema, start, end)
+  if start:
+    selectRange(conn, baseName, tableName, schema, start, end)
 start = end
 end = None
 selectRange(conn, baseName, tableName, schema, start, end)
