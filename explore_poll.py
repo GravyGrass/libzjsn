@@ -1,13 +1,17 @@
 import json
+import logging
 import os
 import time
 import traceback
 
 import libzjsn
 
-def writeJSON(path, content):
-  with open(path, 'w', encoding = 'UTF-8', newline = '\n') as f:
-    json.dump(content, f, ensure_ascii = False, indent = 2)
+from libzjsn import writeDebugJSON as writeJSON
+
+logging.basicConfig(level = logging.INFO)
+
+libzjsn.loadConfig()
+libzjsn.setSocketTimeout(10)
 
 with open('explore_poll.conf', 'r', encoding = 'UTF-8') as conf:
   LOGIN_SERVER, GAME_SERVER, USER_NAME, PASSWORD, POLL_INTERVAL = [l.strip() for l in conf]

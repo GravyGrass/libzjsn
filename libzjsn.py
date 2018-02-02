@@ -2,6 +2,7 @@ import base64
 import collections
 import hashlib
 import json
+import logging
 import re
 import socket
 import time
@@ -9,10 +10,45 @@ import urllib.parse
 import uuid
 import zlib
 
-client_version = '3.4.0'
+client_version = '3.6.0'
+
+logger = logging.getLogger('libzjsn')
+
+initConfig = None
+shipByCid = None
+
+def loadConfig(path = 'init.json'):
+  global initConfig
+  global shipByCid
+  with open(path, 'r', encoding = 'UTF-8') as configFile:
+    initConfig = json.load(configFile, object_pairs_hook=collections.OrderedDict)
+  
+  shipByCid = {}
+  for ship in initConfig['shipCardWu']:
+    cid = int(ship['cid'])
+    shipByCid[cid] = ship
 
 class Error(Exception):
-  pass
+  def __str__(self):
+    return self.message
+
+class HTTPError(Error):
+  def __init__(self, code, message):
+    self.code = code
+    self.message = message
+  
+  def __str__(self):
+    return '{} {}'.format(self.code, self.message)
+
+class ServerError(Error):
+  def __init__(self, errorCode):
+    self.errorCode = int(errorCode)
+    eid = str(self.errorCode)
+    messageDict = initConfig['errorCode']
+    if eid in messageDict:
+      self.message = messageDict[eid]
+    else:
+      self.message = 'Unknown error {}'.format(eid)
 
 class LoginError(Error):
   def __init__(self, message):
@@ -20,6 +56,10 @@ class LoginError(Error):
 
 def setSocketTimeout(timeout):
   socket.setdefaulttimeout(timeout)
+
+def writeDebugJSON(path, content):
+  with open(path, 'w', encoding = 'UTF-8', newline = '\n') as f:
+    json.dump(content, f, ensure_ascii = False, indent = 2)
 
 def sendRawHTTPRequest(host, request):
   with socket.create_connection((host, 80)) as s:
@@ -73,7 +113,12 @@ assert(makeHTTPRequest('s5.jr.moefantasy.com',
 def dechunkHTTPResponse(response):
   originalResponse = response
   try:
-    response = response.split(b'\r\n\r\n', 1)[1]
+    header, response = response.split(b'\r\n\r\n', 1)
+    headerLines = header.split(b'\r\n')
+    responseCode, codeMessage = re.fullmatch(br'^HTTP/1\.1 ([0-9]+) (.*)$', headerLines[0]).group(1, 2)
+    responseCode = int(responseCode)
+    if responseCode != 200:
+      raise HTTPError(responseCode, codeMessage.decode('UTF-8'))
     data = bytes()
     while True:
       [size, tail] = response.split(b'\r\n', 1)
@@ -89,13 +134,18 @@ def dechunkHTTPResponse(response):
     logFile = open(logPath, 'wb')
     logFile.write(originalResponse)
     logFile.close()
-    raise ValueError('Error response logged to {}'.format(logPath)) from e
+    raise
 
 def decompressHTTPResponse(response):
   return zlib.decompress(dechunkHTTPResponse(response))
 
 def decodeHTTPResponse(response):
-  return json.loads(decompressHTTPResponse(response).decode('ASCII'), object_pairs_hook=collections.OrderedDict)
+  parsedResponse = json.loads(decompressHTTPResponse(response).decode('ASCII'), object_pairs_hook=collections.OrderedDict)
+  if 'eid' in parsedResponse:
+    raise ServerError(parsedResponse['eid'])
+  if 'code' in parsedResponse and int(parsedResponse['code'] < 0):
+    raise ServerError(parsedResponse['code'])
+  return parsedResponse
 
 def generateLoginRequestPass1(host, username, password):
   username = base64.b64encode(username.encode('UTF-8')).decode('ASCII')
@@ -118,19 +168,33 @@ def pickCookieFromResponse(response):
   uid = int(uid)
   return (uid, b'; '.join(cookies).decode('ASCII'))
 
-def commandSeries(gameServer, commands, cookie):
+def issueCommand(gameServer, command, cookie, retryCount = 2):
+  logger.info('Issuing command %s', command)
+  request = makeHTTPRequestEx('GET', gameServer, command, cookie)
+  for i in range(0, retryCount + 1):
+    try:
+      if i > 0:
+        logger.warning('Retry %d/%d...', i, retryCount)
+      response = sendRawHTTPRequest(gameServer, request)
+      logger.info('Command finish')
+      return decodeHTTPResponse(response)
+    except HTTPError as e:
+      logger.info('', exc_info = e)
+      if e.code != 400:
+        raise
+    except socket.timeout:
+      logger.info('', exc_info = True)
+
+def commandSeries(gameServer, commands, cookie, interval):
   '''Returns: list<map>, a list of response data.'''
+  isFirstOne = True
   responses = list()
   for command in commands:
-    time.sleep(1)
-    request = makeHTTPRequestEx('GET', gameServer, command, cookie)
-    response = sendRawHTTPRequest(gameServer, request)
-    data = decodeHTTPResponse(response)
-    responses.append(data)
+    if interval and not isFirstOne:
+      time.sleep(interval)
+    responses.append(issueCommand(gameServer, command, cookie))
+    isFirstOne = False
   return responses
-
-def issueCommand(gameServer, command, cookie):
-  return commandSeries(gameServer, [command], cookie)[0]
 
 def loginPass1(host, username, password):
   '''Returns uid and cookie string.'''
@@ -143,9 +207,7 @@ def loginPass1(host, username, password):
 
 def loginPass2(host, uid, cookie, version = client_version):
   command = '/index/login/{}?&client_version={}&phone_type=SM-G900F&phone_version=4.4.2&ratio=1600*900&service=unknown&udid=nopermission&source=android&affiliate=WIFI'.format(uid, version)
-  request = makeHTTPRequestEx('GET', host, command, cookie)
-  response = sendRawHTTPRequest(host, request)
-  data = decodeHTTPResponse(response)
+  data = issueCommand(host, command, cookie)
   if 'loginStatus' not in data or data['loginStatus'] != 1:
     raise LoginError('Logging into game server failed. Response: ' + str(data))
 
@@ -172,23 +234,34 @@ def createCharacter(gameServer, cookie, name, startCid):
   data = decodeHTTPResponse(response)
   return data['status']
 
-def fullLogin(loginServer, gameServer, username, password):
-  '''Returns: (cookie, initGame, pveData, peventData, canBuy, bsea, userInfo, activeUserData, pveUserData, campaignUserData)'''
-  cookie = login(loginServer, gameServer, username, password)
-  initGame, pveData, peventData, canBuy, bsea, userInfo, activeUserData, pveUserData, campaignUserData = commandSeries(
+def simulateMainScreen(gameServer, cookie):
+  return commandSeries(
       gameServer,
-      [ '/api/initGame?&crazy=1'
-      , '/pve/getPveData/'
-      , '/pevent/getPveData/'
-      , '/shop/canBuy/1/'
-      , '/bsea/getData/'
+      [ '/bsea/getData/'
       , '/live/getUserInfo'
       , '/active/getUserData/'
       , '/pve/getUserData/'
       , '/campaign/getUserData/'
       ],
-      cookie
+      cookie,
+      1
   )
+
+def fullLogin(loginServer, gameServer, username, password):
+  '''Returns: (cookie, initGame, pveData, peventData, canBuy, bsea, userInfo, activeUserData, pveUserData, campaignUserData)'''
+  cookie = login(loginServer, gameServer, username, password)
+  initGame, pveData, peventData, canBuy = commandSeries(
+      gameServer,
+      [ '/api/initGame?&crazy=1'
+      , '/pve/getPveData/'
+      , '/pevent/getPveData/'
+      , '/shop/canBuy/1/'
+      ],
+      cookie,
+      1
+  )
+  time.sleep(1)
+  bsea, userInfo, activeUserData, pveUserData, campaignUserData = simulateMainScreen(gameServer, cookie)
   return (cookie, initGame, pveData, peventData, canBuy, bsea, userInfo, activeUserData, pveUserData, campaignUserData)
 
 def getExploreResult(gameServer, exploreId, cookie):
@@ -205,3 +278,18 @@ def startExplore(gameServer, fleetId, exploreId, cookie):
     raise ValueError('Returned explore ID {} is not equal to the requested {}.'.format(
         int(data['exploreId']), exploreId))
   return data
+
+def getCanonicalShipName(shipCid):
+  return shipByCid[shipCid]['title']
+
+def isHalfBroken(ship):
+  hp = int(ship['battleProps']['hp'])
+  maxHp = int(ship['battlePropsMax']['hp'])
+  assert(maxHp > 0)
+  return hp * 2 < maxHp
+
+def isBroken(ship):
+  hp = int(ship['battleProps']['hp'])
+  maxHp = int(ship['battlePropsMax']['hp'])
+  assert(maxHp > 0)
+  return hp * 4 < maxHp
