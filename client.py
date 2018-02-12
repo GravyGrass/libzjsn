@@ -4,9 +4,25 @@ import time
 
 import libzjsn
 
-from libzjsn import writeDebugJSON
+from libzjsn import MapNodeType, writeDebugJSON
 
 logger = logging.getLogger('libzjsn.BasicClient')
+
+class GameLogicError(libzjsn.Error):
+  def __init__(self, message):
+    self.message = message
+
+class DangerousOperation(Exception):
+  def __str__(self):
+    return self.message
+
+class BattleWithBrokenShip(DangerousOperation):
+  def __init__(self, shipId, shipCid, hp, maxHp):
+    self.shipId = shipId
+    self.shipCid = shipCid
+    self.hp = hp
+    self.maxHp = maxHp
+    self.message = 'Ship {} with cid = {} has low HP {}/{}'.format(shipId, shipCid, hp, maxHp)
 
 class BasicClient:
   def __init__(self, loginServer, gameServer, username, password, debug = False):
@@ -29,6 +45,7 @@ class BasicClient:
     self._cookie = cookie
     self._gatherShips(initGame)
     self._gatherFleets(initGame)
+    self._processPveData(pveData)
 
   def _gatherShips(self, initGame):
     self.ships = {}
@@ -47,6 +64,15 @@ class BasicClient:
       fleetId = int(fleet['id'])
       logger.debug('Fleet %d: %s', fleetId, fleet['title'])
       self.fleets[fleetId] = fleet
+  
+  def _processPveData(self, pveData):
+    self.pveLevels = {}
+    self.pveNodes = {}
+
+    for level in pveData['pveLevel']:
+      self.pveLevels[int(level['id'])] = level
+    for node in pveData['pveNode']:
+      self.pveNodes[int(node['id'])] = node
   
   def _addNewShip(self, ship):
     shipId = int(ship['id'])
@@ -109,3 +135,91 @@ class BasicClient:
     if processResult:
       self.processGenericResponse(response)
     return response
+
+class DayWarReport:
+  def __init__(self, dayWarReport):
+    self.canDoNightWar = int(dayWarReport['canDoNightWar']) != 0
+    self.hpBeforeNightSelf = dayWarReport['hpBeforeNightWarSelf']
+    self.hpBeforeNightEnemy = dayWarReport['hpBeforeNightWarEnemy']
+    self.hpMaxSelf = [ship['hpMax'] for ship in dayWarReport['selfShips']]
+    self.hpMaxEnemy = [ship['hpMax'] for ship in dayWarReport['enemyShips']]
+
+class BattleSession:
+  def __init__(self, client, fleetId, mapId):
+    self._client = client
+    self._fleetId = fleetId
+    self._mapId = mapId
+
+    self.currentNode = int(client.pveLevels[mapId]['initNodeId'])
+
+    self.enemyFleetId = 0
+    self.enemyShips = None
+
+  def start(self):
+    client = self._client
+    fleetId = self._fleetId
+    mapId = self._mapId
+
+    self._detectBrokenShips(libzjsn.isHalfBroken)
+
+    supplyResult = client.issueCommand('/boat/supplyBoats/[{}]/{}/{}/'.format(
+        ','.join([str(ship['id']) for ship in self._getSelfShips()]), mapId, 0), True)
+    writeDebugJSON('debugData/supplyBoats.json', supplyResult)
+    time.sleep(1)
+
+    startingData = client.issueCommand('/pve/cha11enge/{}/{}/0/'.format(mapId, fleetId))
+    writeDebugJSON('debugData/cha11enge.{}.{}.json'.format(mapId, fleetId), startingData)
+    assert(int(startingData['pveLevelEnd']) == 0)
+    assert(int(startingData['status']) == 1)
+
+  def next(self):
+    self._detectBrokenShips(libzjsn.isBroken)
+
+    newNext = self._client.issueCommand('/pve/newNext/')
+    writeDebugJSON('debugData/newNext.json', newNext)
+    self.currentNode = int(newNext['node'])
+    self.enemyFleetId = 0
+    self.enemyShips = None
+    time.sleep(1)
+    
+    nodeType = int(self._client.pveNodes[self.currentNode]['nodeType'])
+    if nodeType not in [MapNodeType.RESOURCE, MapNodeType.IDLE, MapNodeType.TOLL]:
+      spy = self._client.issueCommand('/pve/spy/')
+      writeDebugJSON('debugData/spy.json', spy)
+      self.enemyFleetId = int(spy['enemyVO']['enemyFleet']['id'])
+      self.enemyShips = spy['enemyVO']['enemyShips']
+      time.sleep(1)
+
+  def deal(self, formationId):
+    dealResult = self._client.issueCommand(
+        '/pve/dealto/{}/{}/{}/'.format(self.currentNode, self._fleetId, formationId))
+    writeDebugJSON('debugData/dealto.{}.json'.format(self.currentNode), dealResult)
+
+    if 'warReport' in dealResult:
+      dayWarReport = dealResult['warReport']
+      time.sleep(20)
+      return DayWarReport(dayWarReport)
+    else:
+      return None
+
+  def getWarResult(self, nightWar):
+    warResult = self._client.issueCommand(
+        '/pve/getWarResult/{}/'.format(1 if nightWar else 0),
+        True)
+    writeDebugJSON('debugData/warResult.json', warResult)
+    time.sleep(1)
+    return warResult
+
+  def _detectBrokenShips(self, detector):
+    selfShips = self._getSelfShips()
+
+    for ship in selfShips:
+      if libzjsn.isHalfBroken(ship):
+        raise BattleWithBrokenShip(
+            ship['id'], ship['shipCid'], ship['battleProps']['hp'], ship['battlePropsMax']['hp'])
+
+  def _getSelfShips(self):
+    selfShips = self._client.getFleetDetails(self._fleetId)
+    if not selfShips:
+      raise GameLogicError('Fleet {} is empty.'.format(fleetId))
+    return selfShips

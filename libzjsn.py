@@ -10,12 +10,21 @@ import urllib.parse
 import uuid
 import zlib
 
+from enum import IntEnum
+
 client_version = '3.6.0'
 
 logger = logging.getLogger('libzjsn')
 
 initConfig = None
 shipByCid = None
+
+class MapNodeType(IntEnum):
+  ENEMY = 1
+  BOSS = 2
+  RESOURCE = 3
+  IDLE = 4
+  TOLL = 5
 
 def loadConfig(path = 'init.json'):
   global initConfig
