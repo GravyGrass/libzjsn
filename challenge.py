@@ -6,6 +6,7 @@ import traceback
 
 import libzjsn
 
+from challenge_lib import activeStrategy
 from client import BasicClient, BattleSession, BattleWithBrokenShip
 from libzjsn import writeDebugJSON as writeJSON
 
@@ -16,59 +17,8 @@ libzjsn.setSocketTimeout(60)
 
 TARGET_LEVEL = 110
 
-def parseAllMatcher(parameters):
-  def apply(enemyFleetId, enemyShips):
-    return True
-  return apply
-
-def parseAssertEnemyMatcher(parameters):
-  enemyCid = int(parameters[0])
-
-  def apply(enemyFleetId, enemyShips):
-    for ship in enemyShips:
-      if int(ship['shipCid']) == enemyCid:
-        return True
-    return False
-
-  return apply
-
-def parseMatcher(matcherExpr):
-  ruleSelector = matcherExpr[0]
-  parameters = matcherExpr[1:]
-  if ruleSelector == 'all':
-    return parseAllMatcher(parameters)
-  elif ruleSelector == 'assertEnemy':
-    return parseAssertEnemyMatcher(parameters)
-
-class NodeRuleEntry:
-  def __init__(self, matcher, formation):
-    self.matcher = matcher
-    self.formation = formation
-
-class NodeRule:
-  def __init__(self, ruleEntries):
-    self._rules = []
-    for ruleEntry in ruleEntries:
-      formation = int(ruleEntry[0])
-      matcherExpr = ruleEntry[1:]
-      self._rules.append(NodeRuleEntry(parseMatcher(matcherExpr), formation))
-
-  def apply(self, enemyFleetId, enemyShips):
-    for rule in self._rules:
-      if rule.matcher(enemyFleetId, enemyShips):
-        return rule.formation
-    return 0
-
-def parseNodeRules(nodeRules):
-  rules = {}
-  for nodeId, nodeRuleExpr in nodeRules.items():
-    nodeId = int(nodeId)
-    nodeRule = NodeRule(nodeRuleExpr)
-    rules[nodeId] = nodeRule
-  return rules
-
 config = json.load(open('challenge.json', 'r'))
-nodeRules = parseNodeRules(config['nodeRules'])
+nodeRules = activeStrategy.nodeRules
 
 def getExpProgress(shipResult):
   exp = 0
@@ -78,10 +28,10 @@ def getExpProgress(shipResult):
   return (exp, exp + needed)
 
 def execute(client):
-  session = BattleSession(client, config['fleetId'], config['mapId'])
+  session = BattleSession(client, config['fleetId'], activeStrategy.mapId)
   session.start()
 
-  while session.currentNode in config['continuingNodes']:
+  while session.currentNode in activeStrategy.continuingNodes:
     session.next()
     currentNodeId = session.currentNode
     enemyFleetId = session.enemyFleetId
