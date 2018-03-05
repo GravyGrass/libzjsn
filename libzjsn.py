@@ -193,6 +193,8 @@ def issueCommand(gameServer, command, cookie, retryCount = 2):
         raise
     except socket.timeout:
       logger.info('', exc_info = True)
+    except TimeoutError:
+      logger.info('', exc_info = True)
 
 def commandSeries(gameServer, commands, cookie, interval):
   '''Returns: list<map>, a list of response data.'''

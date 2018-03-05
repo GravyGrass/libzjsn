@@ -197,7 +197,7 @@ class BattleSession:
 
     if 'warReport' in dealResult:
       dayWarReport = dealResult['warReport']
-      time.sleep(20)
+      time.sleep(10)
       return DayWarReport(dayWarReport)
     else:
       return None

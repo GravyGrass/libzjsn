@@ -73,27 +73,36 @@ def execute(client):
             return '500 drop reached'
 
 def main():
-  client = BasicClient(
-      config['loginServer'],
-      config['gameServer'],
-      config['userName'],
-      config['password'],
-      debug = True)
+  def makeClient():
+    return BasicClient(
+        config['loginServer'],
+        config['gameServer'],
+        config['userName'],
+        config['password'],
+        debug = True)
   while True:
+    client = makeClient()
     try:
-      message = execute(client)
-      if message:
-        logging.info('%s', message)
-        break
-      client.simulateMainScreen()
-      time.sleep(1)
-    except BattleWithBrokenShip as e:
-      repairResult = client.issueCommand('/boat/instantRepairShips/[{}]/'.format(e.shipId), True)
-      writeJSON('debugData/instantRepairShips.json', repairResult)
-      time.sleep(2)
+      while True:
+        try:
+          message = execute(client)
+          if message:
+            logging.info('%s', message)
+            return
+          client.simulateMainScreen()
+          time.sleep(1)
+        except BattleWithBrokenShip as e:
+          repairResult = client.issueCommand('/boat/instantRepairShips/[{}]/'.format(e.shipId), True)
+          writeJSON('debugData/instantRepairShips.json', repairResult)
+          time.sleep(2.5)
+        except libzjsn.ServerError as e:
+          if e.message == '参数错误':
+            logging.info('Ignorable ServerError', exc_info = e)
+          else:
+            raise
     except libzjsn.ServerError as e:
-      if e.message == '参数错误':
-        logging.info('Ignorable ServerError', exc_info = e)
+      if e.message in ['数据不存在', '正在出征中']:
+        logging.info('Reload because of ServerError', exc_info = e)
       else:
         raise
 
