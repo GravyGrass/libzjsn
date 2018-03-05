@@ -18,7 +18,7 @@ class AssertEnemyMatcher:
 
   def apply(self, enemyFleetId: int, enemyShips: int):
     for ship in enemyShips:
-      if int(ship['shipCid']) == enemyCid:
+      if int(ship['shipCid']) == self.enemyCid:
         return True
     return False
 
@@ -38,8 +38,14 @@ class Strategy:
     self.continuingNodes = continuingNodes
     self.nodeRules = nodeRules
 
+strategy_201Boss = Strategy(201, [20101, 20103, 20105], {
+  20103: NodeRule([(AllMatcher(), 1)]),
+  20105: NodeRule([(AllMatcher(), 1)]),
+  20107: NodeRule([(AssertEnemyMatcher(20100003), 2)])
+})
+
 strategy_601A = Strategy(601, [60101], {
   60102: NodeRule([(AllMatcher(), 5)])
 })
 
-activeStrategy = strategy_601A
+activeStrategy = strategy_201Boss

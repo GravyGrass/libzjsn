@@ -71,6 +71,11 @@ def execute(client):
 
           if 'drop500' in warResult and int(warResult['drop500']) == 1:
             return '500 drop reached'
+          
+          if client.resources.spoils:
+            logging.info('%d spoils', client.resources.spoils)
+            if client.resources.spoils >= int(config['targetSpoils']):
+              return 'Enough spoils for today'
 
 def main():
   def makeClient():

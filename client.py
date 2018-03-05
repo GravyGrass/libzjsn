@@ -24,6 +24,10 @@ class BattleWithBrokenShip(DangerousOperation):
     self.maxHp = maxHp
     self.message = 'Ship {} with cid = {} has low HP {}/{}'.format(shipId, shipCid, hp, maxHp)
 
+class Resources:
+  def __init__(self):
+    self.spoils = None
+
 class BasicClient:
   def __init__(self, loginServer, gameServer, username, password, debug = False):
     self._gameServer = gameServer
@@ -46,6 +50,7 @@ class BasicClient:
     self._gatherShips(initGame)
     self._gatherFleets(initGame)
     self._processPveData(pveData)
+    self.resources = Resources()
 
   def _gatherShips(self, initGame):
     self.ships = {}
@@ -64,7 +69,7 @@ class BasicClient:
       fleetId = int(fleet['id'])
       logger.debug('Fleet %d: %s', fleetId, fleet['title'])
       self.fleets[fleetId] = fleet
-  
+
   def _processPveData(self, pveData):
     self.pveLevels = {}
     self.pveNodes = {}
@@ -102,6 +107,13 @@ class BasicClient:
         self.getTaskAward(taskCid)
         time.sleep(1)
   
+  def _processSpoils(self, spoils):
+    try:
+      spoils = int(spoils)
+    except:
+      logger.info('Unknown "spoils" data')
+    self.resources.spoils = spoils
+  
   def processGenericResponse(self, response):
     for key, data in response.items():
       if key == 'userVo':
@@ -114,6 +126,8 @@ class BasicClient:
         self._processNewShipVO(data)
       elif key == 'updateTaskVo':
         self._processUpdateTaskVo(data)
+      elif key == 'spoils':
+        self._processSpoils(data)
       else:
         logger.debug('Unknown response key: %s', key)
   
