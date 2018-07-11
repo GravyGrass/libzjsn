@@ -3,6 +3,8 @@ import collections
 import hashlib
 import json
 import logging
+import os
+import os.path
 import re
 import socket
 import time
@@ -12,7 +14,9 @@ import zlib
 
 from enum import IntEnum
 
-client_version = '3.6.0'
+from global_args import args
+
+client_version = '3.7.0'
 
 logger = logging.getLogger('libzjsn')
 
@@ -67,7 +71,11 @@ def setSocketTimeout(timeout):
   socket.setdefaulttimeout(timeout)
 
 def writeDebugJSON(path, content):
-  with open(path, 'w', encoding = 'UTF-8', newline = '\n') as f:
+  if not args.debug_data_dir:
+    return
+  fullPath = os.path.join(args.debug_data_dir, path)
+  os.makedirs(os.path.dirname(fullPath), exist_ok = True)
+  with open(fullPath, 'w', encoding = 'UTF-8', newline = '\n') as f:
     json.dump(content, f, ensure_ascii = False, indent = 2)
 
 def sendRawHTTPRequest(host, request):

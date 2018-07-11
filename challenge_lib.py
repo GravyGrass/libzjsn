@@ -38,14 +38,16 @@ class Strategy:
     self.continuingNodes = continuingNodes
     self.nodeRules = nodeRules
 
-strategy_201Boss = Strategy(201, [20101, 20103, 20105], {
-  20103: NodeRule([(AllMatcher(), 1)]),
-  20105: NodeRule([(AllMatcher(), 1)]),
-  20107: NodeRule([(AssertEnemyMatcher(20100003), 2)])
-})
-
-strategy_601A = Strategy(601, [60101], {
-  60102: NodeRule([(AllMatcher(), 5)])
-})
-
-activeStrategy = strategy_201Boss
+strategies = {
+  '201Boss': Strategy(201, [20101, 20103, 20105], {
+    20103: NodeRule([(AllMatcher(), 1)]),
+    20105: NodeRule([(AllMatcher(), 1)]),
+    20107: NodeRule([(AssertEnemyMatcher(20100003), 2)])
+  }),
+  '601A': Strategy(601, [60101], {
+    60102: NodeRule([(AllMatcher(), 5)])
+  }),
+  '701A': Strategy(701, [70101], {
+    70102: NodeRule([(AllMatcher(), 5)])
+  })
+}

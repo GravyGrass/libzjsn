@@ -36,16 +36,15 @@ class BasicClient:
       loginServer, gameServer, username, password)
     logger.info('Login finished')
     if debug:
-      os.makedirs('debugData', exist_ok = True)
-      writeDebugJSON('debugData/initGame.json', initGame)
-      writeDebugJSON('debugData/pveData.json', pveData)
-      writeDebugJSON('debugData/peventData.json', peventData)
-      writeDebugJSON('debugData/canBuy.json', canBuy)
-      writeDebugJSON('debugData/bsea.json', bsea)
-      writeDebugJSON('debugData/userInfo.json', userInfo)
-      writeDebugJSON('debugData/activeUserData.json', activeUserData)
-      writeDebugJSON('debugData/pveUserData.json', pveUserData)
-      writeDebugJSON('debugData/campaignUserData.json', campaignUserData)
+      writeDebugJSON('initGame.json', initGame)
+      writeDebugJSON('pveData.json', pveData)
+      writeDebugJSON('peventData.json', peventData)
+      writeDebugJSON('canBuy.json', canBuy)
+      writeDebugJSON('bsea.json', bsea)
+      writeDebugJSON('userInfo.json', userInfo)
+      writeDebugJSON('activeUserData.json', activeUserData)
+      writeDebugJSON('pveUserData.json', pveUserData)
+      writeDebugJSON('campaignUserData.json', campaignUserData)
     self._cookie = cookie
     self._gatherShips(initGame)
     self._gatherFleets(initGame)
@@ -178,11 +177,11 @@ class BattleSession:
 
     supplyResult = client.issueCommand('/boat/supplyBoats/[{}]/{}/{}/'.format(
         ','.join([str(ship['id']) for ship in self._getSelfShips()]), mapId, 0), True)
-    writeDebugJSON('debugData/supplyBoats.json', supplyResult)
+    writeDebugJSON('supplyBoats.json', supplyResult)
     time.sleep(1)
 
     startingData = client.issueCommand('/pve/cha11enge/{}/{}/0/'.format(mapId, fleetId))
-    writeDebugJSON('debugData/cha11enge.{}.{}.json'.format(mapId, fleetId), startingData)
+    writeDebugJSON('cha11enge.{}.{}.json'.format(mapId, fleetId), startingData)
     assert(int(startingData['pveLevelEnd']) == 0)
     assert(int(startingData['status']) == 1)
 
@@ -190,7 +189,7 @@ class BattleSession:
     self._detectBrokenShips(libzjsn.isBroken)
 
     newNext = self._client.issueCommand('/pve/newNext/')
-    writeDebugJSON('debugData/newNext.json', newNext)
+    writeDebugJSON('newNext.json', newNext)
     self.currentNode = int(newNext['node'])
     self.enemyFleetId = 0
     self.enemyShips = None
@@ -199,7 +198,7 @@ class BattleSession:
     nodeType = int(self._client.pveNodes[self.currentNode]['nodeType'])
     if nodeType not in [MapNodeType.RESOURCE, MapNodeType.IDLE, MapNodeType.TOLL]:
       spy = self._client.issueCommand('/pve/spy/')
-      writeDebugJSON('debugData/spy.json', spy)
+      writeDebugJSON('spy.json', spy)
       self.enemyFleetId = int(spy['enemyVO']['enemyFleet']['id'])
       self.enemyShips = spy['enemyVO']['enemyShips']
       time.sleep(1)
@@ -207,7 +206,7 @@ class BattleSession:
   def deal(self, formationId):
     dealResult = self._client.issueCommand(
         '/pve/dealto/{}/{}/{}/'.format(self.currentNode, self._fleetId, formationId))
-    writeDebugJSON('debugData/dealto.{}.json'.format(self.currentNode), dealResult)
+    writeDebugJSON('dealto.{}.{}.json'.format(self.currentNode, time.time()), dealResult)
 
     if 'warReport' in dealResult:
       dayWarReport = dealResult['warReport']
@@ -220,7 +219,7 @@ class BattleSession:
     warResult = self._client.issueCommand(
         '/pve/getWarResult/{}/'.format(1 if nightWar else 0),
         True)
-    writeDebugJSON('debugData/warResult.json', warResult)
+    writeDebugJSON('warResult.json', warResult)
     time.sleep(1)
     return warResult
 

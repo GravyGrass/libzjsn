@@ -1,3 +1,6 @@
+#!/usr/bin/python3
+
+import argparse
 import json
 import logging
 import os
@@ -6,9 +9,15 @@ import traceback
 
 import libzjsn
 
-from challenge_lib import activeStrategy
+from challenge_lib import strategies
 from client import BasicClient, BattleSession, BattleWithBrokenShip
+from global_args import extra_args
 from libzjsn import writeDebugJSON as writeJSON
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--fleet-id', type = int, required = True)
+parser.add_argument('--strategy', required = True)
+args = parser.parse_args(extra_args)
 
 logging.basicConfig(level = logging.DEBUG)
 
@@ -18,6 +27,7 @@ libzjsn.setSocketTimeout(60)
 TARGET_LEVEL = 110
 
 config = json.load(open('challenge.json', 'r'))
+activeStrategy = strategies[args.strategy]
 nodeRules = activeStrategy.nodeRules
 
 def getExpProgress(shipResult):
@@ -28,7 +38,7 @@ def getExpProgress(shipResult):
   return (exp, exp + needed)
 
 def execute(client):
-  session = BattleSession(client, config['fleetId'], activeStrategy.mapId)
+  session = BattleSession(client, args.fleet_id, activeStrategy.mapId)
   session.start()
 
   while session.currentNode in activeStrategy.continuingNodes:
@@ -98,7 +108,7 @@ def main():
           time.sleep(1)
         except BattleWithBrokenShip as e:
           repairResult = client.issueCommand('/boat/instantRepairShips/[{}]/'.format(e.shipId), True)
-          writeJSON('debugData/instantRepairShips.json', repairResult)
+          writeJSON('instantRepairShips.json', repairResult)
           time.sleep(2.5)
         except libzjsn.ServerError as e:
           if e.message == '参数错误':
