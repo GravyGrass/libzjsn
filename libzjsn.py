@@ -16,7 +16,7 @@ from enum import IntEnum
 
 from global_args import args
 
-client_version = '3.7.0'
+client_version = '3.8.0'
 
 logger = logging.getLogger('libzjsn')
 
