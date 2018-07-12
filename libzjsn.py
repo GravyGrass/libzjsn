@@ -10,7 +10,7 @@ import urllib.parse
 import uuid
 import zlib
 
-client_version = '3.6.0'
+client_version = '3.8.0'
 
 logger = logging.getLogger('libzjsn')
 
